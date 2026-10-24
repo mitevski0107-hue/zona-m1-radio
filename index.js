@@ -73,7 +73,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   log.info(`Logged in as ${readyClient.user.tag}`);
   readyClient.user.setActivity("Zona M1 Radio", { type: ActivityType.Listening });
   try {
-    await registerCommands(config.token, readyClient.user.id);
+    await registerCommands(config.token, readyClient.user.id, config.commandGuildId);
   } catch (error) {
     log.error("Could not register slash commands. Previously registered commands will still work.", error);
   }
@@ -88,13 +88,17 @@ client.once(Events.ClientReady, async (readyClient) => {
         readyClient.user.setActivity("Zona M1 Radio", { type: ActivityType.Listening });
         return;
       }
-      const name = title.length > 128 ? `${title.slice(0, 127)}…` : title;
+      const name = title.length > 128 ? `${title.slice(0, 127)}\u2026` : title;
       log.info(`Now playing: ${title}`);
       readyClient.user.setActivity(name, { type: ActivityType.Listening });
     },
   });
   manager.currentTitle = () => monitor.title;
+  manager.listenerCount = () => monitor.listeners;
   monitor.start();
+  manager.resumeSaved().catch((error) => {
+    log.error("Could not rejoin saved channels", error);
+  });
   log.info("Ready. Each server has its own voice connection, volume, and idle timeout.");
 });
 
