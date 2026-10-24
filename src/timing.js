@@ -1,5 +1,8 @@
 "use strict";
 
+const MIN_IDLE_MINUTES = 1;
+const MAX_IDLE_MINUTES = 60;
+const DEFAULT_IDLE_MINUTES = 5;
 const MIN_VOLUME = 0;
 const MAX_VOLUME = 100;
 const RECONNECT_BASE_MS = 2000;
@@ -16,6 +19,13 @@ function normalizeVolumeInput(raw) {
   if (raw === undefined || raw === null || raw === "") return { ok: false };
   const value = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isInteger(value) || value < MIN_VOLUME || value > MAX_VOLUME) return { ok: false };
+  return { ok: true, value };
+}
+
+function normalizeIdleInput(raw) {
+  if (raw === undefined || raw === null || raw === "") return { ok: false };
+  const value = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isInteger(value) || value < MIN_IDLE_MINUTES || value > MAX_IDLE_MINUTES) return { ok: false };
   return { ok: true, value };
 }
 
@@ -36,8 +46,12 @@ function countHumans(members) {
 module.exports = {
   MIN_VOLUME,
   MAX_VOLUME,
+  MIN_IDLE_MINUTES,
+  MAX_IDLE_MINUTES,
+  DEFAULT_IDLE_MINUTES,
   parseDefaultVolume,
   normalizeVolumeInput,
+  normalizeIdleInput,
   reconnectDelayMs,
   countHumans,
 };

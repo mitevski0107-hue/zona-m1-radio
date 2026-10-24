@@ -1,6 +1,6 @@
 "use strict";
 
-const { parseDefaultVolume } = require("./timing");
+const { parseDefaultVolume, DEFAULT_IDLE_MINUTES } = require("./timing");
 
 const DEFAULT_STREAM_URL = "https://zonam1.ddns.net:8400/;";
 
@@ -9,7 +9,8 @@ function loadConfig() {
     token: process.env.DISCORD_TOKEN?.trim() || "",
     streamUrl: process.env.STREAM_URL?.trim() || DEFAULT_STREAM_URL,
     defaultVolume: parseDefaultVolume(process.env.DEFAULT_VOLUME),
-    idleTimeoutMs: 5 * 60 * 1000,
+    idleMinutes: DEFAULT_IDLE_MINUTES,
+    idleTimeoutMs: DEFAULT_IDLE_MINUTES * 60 * 1000,
   };
 }
 

@@ -11,6 +11,9 @@ const { RadioManager } = require("./src/manager");
 const { handleCommand } = require("./src/commands");
 const { registerCommands } = require("./src/register");
 const { spawn } = require("node:child_process");
+const path = require("node:path");
+const { createStore } = require("./src/store");
+const { StationMonitor } = require("./src/station");
 
 const config = loadConfig();
 
@@ -60,7 +63,10 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
 });
 
-const manager = new RadioManager(client, config);
+const store = createStore(path.join(process.cwd(), "data", "guilds.json"));
+store.load();
+const manager = new RadioManager(client, config, store);
+let monitor = null;
 let shuttingDown = false;
 
 client.once(Events.ClientReady, async (readyClient) => {
@@ -73,7 +79,23 @@ client.once(Events.ClientReady, async (readyClient) => {
   }
   log.info(`Stream URL: ${config.streamUrl}`);
   log.info(`Default volume: ${config.defaultVolume}`);
-  log.info("Ready. Each server has its own voice connection and volume.");
+  log.info(`Default idle timeout: ${config.idleMinutes} minutes`);
+  monitor = new StationMonitor({
+    url: config.streamUrl,
+    onTitle: (title) => {
+      if (!title) {
+        log.info("Song title cleared.");
+        readyClient.user.setActivity("Zona M1 Radio", { type: ActivityType.Listening });
+        return;
+      }
+      const name = title.length > 128 ? `${title.slice(0, 127)}…` : title;
+      log.info(`Now playing: ${title}`);
+      readyClient.user.setActivity(name, { type: ActivityType.Listening });
+    },
+  });
+  manager.currentTitle = () => monitor.title;
+  monitor.start();
+  log.info("Ready. Each server has its own voice connection, volume, and idle timeout.");
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -83,8 +105,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     log.error("Command handler failed", error);
     const content = "Something went wrong. Try again in a moment.";
     try {
-      if (interaction.deferred || interaction.replied) await interaction.followUp({ content });
-      else await interaction.reply({ content });
+      if (interaction.deferred || interaction.replied) await interaction.followUp({ content, allowedMentions: { parse: [] } });
+      else await interaction.reply({ content, allowedMentions: { parse: [] } });
     } catch (replyError) {
       log.error("Could not send the error reply", replyError);
     }
@@ -127,6 +149,7 @@ async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info(`Received ${signal}. Disconnecting ${manager.activeCount()} server(s).`);
+  monitor?.stop();
   await manager.leaveAll(signal);
   client.destroy();
   process.exit(0);

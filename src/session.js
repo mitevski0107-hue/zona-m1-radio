@@ -52,6 +52,7 @@ class RadioSession {
     this.reconnectAttempt = 0;
     this.reconnectTimer = null;
     this.idleTimer = null;
+    this.idleUntil = null;
     this.healthyTimer = null;
     this.stationAbort = null;
     this.chain = Promise.resolve();
@@ -303,9 +304,44 @@ class RadioSession {
   }
 
   clearIdle() {
-    if (!this.idleTimer) return;
-    clearTimeout(this.idleTimer);
+    if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = null;
+    this.idleUntil = null;
+  }
+
+  armIdle(channelName) {
+    if (this.idleTimer) return;
+    this.idleUntil = Date.now() + this.idleTimeoutMs;
+    log.info(
+      `${this.tag()} #${channelName} is empty. Leaving in ${Math.round(this.idleTimeoutMs / 1000)}s if nobody joins.`,
+    );
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      this.idleUntil = null;
+      this.enqueue(() => this.finishIdle()).catch((error) => {
+        log.error(`${this.tag()} idle task failed`, error);
+      });
+    }, this.idleTimeoutMs);
+  }
+
+  setIdleTimeout(ms) {
+    this.idleTimeoutMs = ms;
+    if (!this.idleTimer) return false;
+    this.clearIdle();
+    this.armIdle("voice");
+    return true;
+  }
+
+  statusSnapshot() {
+    return {
+      channelId: this.channelId,
+      volume: this.volume,
+      idleMinutes: Math.round(this.idleTimeoutMs / 60000),
+      idleRemainingMs: this.idleUntil == null ? null : Math.max(0, this.idleUntil - Date.now()),
+      playing: this.isLive(),
+      reconnecting: this.isActive() && !this.isLive() && this.reconnectAttempt > 0,
+      active: this.isActive(),
+    };
   }
 
   scheduleReconnect(reason) {
@@ -351,14 +387,7 @@ class RadioSession {
     if (!this.isActive() || !channel) return;
     const humans = countHumans(channel.members);
     if (humans === 0) {
-      if (this.idleTimer) return;
-      log.info(`${this.tag()} #${channel.name} is empty. Leaving in ${Math.round(this.idleTimeoutMs / 1000)}s if nobody joins.`);
-      this.idleTimer = setTimeout(() => {
-        this.idleTimer = null;
-        this.enqueue(() => this.finishIdle()).catch((error) => {
-          log.error(`${this.tag()} idle task failed`, error);
-        });
-      }, this.idleTimeoutMs);
+      this.armIdle(channel.name);
       return;
     }
 

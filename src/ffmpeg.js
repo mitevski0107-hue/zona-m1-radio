@@ -57,7 +57,9 @@ function spawnDecoder() {
   return { bin, child };
 }
 
-function openStation(url, signal, redirects = 0) {
+function openStation(url, signal, options = {}) {
+  const redirects = options.redirects ?? 0;
+  const icy = options.icy === true;
   return new Promise((resolve, reject) => {
     let settled = false;
     const fail = (error) => {
@@ -78,7 +80,7 @@ function openStation(url, signal, redirects = 0) {
         signal,
         headers: {
           "User-Agent": "ZonaM1RadioBot/1.0",
-          "Icy-MetaData": "0",
+          "Icy-MetaData": icy ? "1" : "0",
           Accept: "audio/mpeg,*/*",
         },
       },
@@ -91,7 +93,7 @@ function openStation(url, signal, redirects = 0) {
             return;
           }
           const next = new URL(response.headers.location, url).href;
-          openStation(next, signal, redirects + 1).then(succeed, fail);
+          openStation(next, signal, { ...options, redirects: redirects + 1 }).then(succeed, fail);
           return;
         }
         if (status !== 200) {

@@ -11,12 +11,17 @@ Anyone in the server can use these. There is no play, stop, pause, or skip. The 
 | `/join` | Joins the voice channel you are in and starts the radio. If the bot is already in the server, it moves and keeps streaming. |
 | `/volume` | Sets this server's volume from 0 to 100. With no number, or a number outside that range, it replies with the current volume. |
 | `/leave` | Disconnects immediately. |
+| `/status` | Shows the channel, volume, whether audio is flowing, the current song, and the idle countdown. |
+| `/nowplaying` | Shows the song title the station is sending. |
+| `/settings` | Sets how long the bot stays in an empty channel, from 1 to 60 minutes. With no number, it replies with the current value. |
 
-If a voice channel empties out, the bot waits 5 minutes. Anyone joining cancels that timer. If it is still empty when the timer ends, the bot leaves and drops that server's connection.
+If a voice channel empties out, the bot waits that server's idle time (5 minutes until someone changes it). Anyone joining cancels the timer. If it is still empty when the timer ends, the bot leaves and drops that server's connection.
 
-If the stream dies or Discord drops the voice connection while the bot should still be playing, it rejoins with a delay: 2s, 4s, 8s, 16s, then 30s. A healthy stream resets the delay.
+If the stream dies or Discord drops the voice connection while the bot should still be playing, it rejoins with a delay: 2s, 4s, 8s, 16s, then 30s. The delay resets after the audio has stayed up for 8 seconds.
 
-The bot's status is **Listening to Zona M1 Radio**.
+The bot's status starts as **Listening to Zona M1 Radio**, then switches to the current song title when the station sends one.
+
+Volume and the idle timeout are saved per server in `data/guilds.json` on the host. That file is not in git, so a pull or a restart keeps those settings. Servers that have never changed them use volume 50 and 5 minutes.
 
 ## PebbleHost
 
@@ -40,7 +45,7 @@ https://discord.com/oauth2/authorize?client_id=CLIENT_ID&permissions=3146752&sco
 
 In the Developer Portal you do **not** need the privileged member, presence, or message-content intents. The bot requests `Guilds` and `GuildVoiceStates` only.
 
-ffmpeg is bundled via `ffmpeg-static`. If the machine already has ffmpeg, set `FFMPEG_PATH` to that binary. The stream is decoded to 48 kHz stereo PCM with ffmpeg reconnect flags, then sent to Discord.
+ffmpeg decodes the station to 48 kHz stereo PCM. Node.js opens the stream itself, because the bundled ffmpeg build crashes if it connects to this HTTPS station directly. Song titles are read from the station's `/stats?json=1` page. Reconnects are handled by the bot, not by ffmpeg.
 
 ## Local
 

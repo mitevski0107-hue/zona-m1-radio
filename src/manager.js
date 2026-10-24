@@ -3,20 +3,30 @@
 const { RadioSession } = require("./session");
 
 class RadioManager {
-  constructor(client, config) {
+  constructor(client, config, store) {
     this.client = client;
     this.config = config;
+    this.store = store;
     this.sessions = new Map();
-    this.volumes = new Map();
+    this.currentTitle = () => null;
   }
 
   getVolume(guildId) {
-    return this.volumes.has(guildId) ? this.volumes.get(guildId) : this.config.defaultVolume;
+    return this.store.getVolume(guildId, this.config.defaultVolume);
   }
 
   setVolume(guildId, level) {
-    this.volumes.set(guildId, level);
+    this.store.setVolume(guildId, level);
     this.sessions.get(guildId)?.applyVolume(level);
+  }
+
+  getIdleMinutes(guildId) {
+    return this.store.getIdleMinutes(guildId, this.config.idleMinutes);
+  }
+
+  setIdleMinutes(guildId, minutes) {
+    this.store.setIdleMinutes(guildId, minutes);
+    return this.sessions.get(guildId)?.setIdleTimeout(minutes * 60 * 1000) === true;
   }
 
   session(guildId) {
@@ -24,7 +34,7 @@ class RadioManager {
     if (current) return current;
     current = new RadioSession(guildId, this.client, {
       streamUrl: this.config.streamUrl,
-      idleTimeoutMs: this.config.idleTimeoutMs,
+      idleTimeoutMs: this.getIdleMinutes(guildId) * 60 * 1000,
       volume: this.getVolume(guildId),
       onEnded: (id) => {
         if (this.sessions.get(id) === current) this.sessions.delete(id);

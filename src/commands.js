@@ -1,8 +1,9 @@
 "use strict";
 
 const { PermissionFlagsBits, SlashCommandBuilder } = require("discord.js");
-const { MAX_VOLUME, MIN_VOLUME, normalizeVolumeInput } = require("./timing");
+const { MAX_VOLUME, MIN_IDLE_MINUTES, MAX_IDLE_MINUTES, MIN_VOLUME, normalizeIdleInput, normalizeVolumeInput } = require("./timing");
 const { RadioError } = require("./session");
+const { formatStatus } = require("./status");
 const { log } = require("./logger");
 
 const JOIN_REPLIES = {
@@ -22,6 +23,21 @@ const commandBuilders = [
       option.setName("level").setDescription("Volume from 0 to 100").setRequired(false),
     ),
   new SlashCommandBuilder().setName("leave").setDescription("Disconnect the radio from the voice channel"),
+  new SlashCommandBuilder()
+    .setName("status")
+    .setDescription("Show whether the radio is playing in this server"),
+  new SlashCommandBuilder()
+    .setName("nowplaying")
+    .setDescription("Show the song Zona M1 Radio is playing"),
+  new SlashCommandBuilder()
+    .setName("settings")
+    .setDescription("Set how long the bot stays in an empty voice channel")
+    .addIntegerOption((option) =>
+      option
+        .setName("idle")
+        .setDescription("Minutes to wait in an empty channel, from 1 to 60")
+        .setRequired(false),
+    ),
 ];
 
 function commandJson() {
@@ -29,11 +45,12 @@ function commandJson() {
 }
 
 async function reply(interaction, content) {
+  const payload = { content, allowedMentions: { parse: [] } };
   if (interaction.deferred || interaction.replied) {
-    await interaction.editReply(content);
+    await interaction.editReply(payload);
     return;
   }
-  await interaction.reply(content);
+  await interaction.reply(payload);
 }
 
 async function voiceMember(interaction) {
@@ -94,6 +111,58 @@ async function handleLeave(interaction, manager) {
   await reply(interaction, "Left the channel.");
 }
 
+async function handleStatus(interaction, manager) {
+  const session = manager.peek(interaction.guildId);
+  const snapshot = session?.statusSnapshot() ?? {
+    channelId: null,
+    volume: manager.getVolume(interaction.guildId),
+    idleMinutes: manager.getIdleMinutes(interaction.guildId),
+    idleRemainingMs: null,
+    playing: false,
+    reconnecting: false,
+    active: false,
+  };
+  let channelName = "a voice channel";
+  if (snapshot.channelId) {
+    const channel = interaction.guild.channels.cache.get(snapshot.channelId);
+    if (channel) channelName = `#${channel.name}`;
+  }
+  await reply(
+    interaction,
+    formatStatus({
+      ...snapshot,
+      channelName,
+      title: manager.currentTitle(),
+    }),
+  );
+}
+
+async function handleNowPlaying(interaction, manager) {
+  const title = manager.currentTitle();
+  if (!title) {
+    await reply(interaction, "Zona M1 Radio is on, but no song title has come through yet.");
+    return;
+  }
+  await reply(interaction, `Now playing: ${title}.`);
+}
+
+async function handleSettings(interaction, manager) {
+  const supplied = interaction.options.getInteger("idle");
+  const current = manager.getIdleMinutes(interaction.guildId);
+  const parsed = normalizeIdleInput(supplied);
+  if (!parsed.ok) {
+    await reply(
+      interaction,
+      `Idle timeout is ${current} minute${current === 1 ? "" : "s"}. Use a number from ${MIN_IDLE_MINUTES} to ${MAX_IDLE_MINUTES}.`,
+    );
+    return;
+  }
+  const restarted = manager.setIdleMinutes(interaction.guildId, parsed.value);
+  const noun = parsed.value === 1 ? "minute" : "minutes";
+  const extra = restarted ? " The empty-channel countdown started over." : "";
+  await reply(interaction, `Idle timeout set to ${parsed.value} ${noun}.${extra}`);
+}
+
 async function handleCommand(interaction, manager) {
   if (!interaction.isChatInputCommand()) return;
   if (!interaction.inGuild()) {
@@ -111,6 +180,18 @@ async function handleCommand(interaction, manager) {
   }
   if (interaction.commandName === "leave") {
     await handleLeave(interaction, manager);
+    return;
+  }
+  if (interaction.commandName === "status") {
+    await handleStatus(interaction, manager);
+    return;
+  }
+  if (interaction.commandName === "nowplaying") {
+    await handleNowPlaying(interaction, manager);
+    return;
+  }
+  if (interaction.commandName === "settings") {
+    await handleSettings(interaction, manager);
   }
 }
 
