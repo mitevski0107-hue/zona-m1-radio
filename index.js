@@ -10,6 +10,7 @@ const { resolveFfmpeg } = require("./src/ffmpeg");
 const { RadioManager } = require("./src/manager");
 const { handleCommand } = require("./src/commands");
 const { registerCommands } = require("./src/register");
+const { t } = require("./src/i18n");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const { createStore } = require("./src/store");
@@ -91,6 +92,9 @@ client.once(Events.ClientReady, async (readyClient) => {
       const name = title.length > 128 ? title.slice(0, 128) : title;
       log.info(`Now playing: ${title}`);
       readyClient.user.setActivity(name, { type: ActivityType.Listening });
+      manager.announceSong(title, monitor.listeners).catch((error) => {
+        log.error("Could not announce the song", error);
+      });
     },
   });
   manager.currentTitle = () => monitor.title;
@@ -107,7 +111,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await handleCommand(interaction, manager);
   } catch (error) {
     log.error("Command handler failed", error);
-    const content = "Something went wrong. Try again in a moment.";
+    const content = t(manager.getLanguage(interaction.guildId), "failed");
     try {
       if (interaction.deferred || interaction.replied) await interaction.followUp({ content, allowedMentions: { parse: [] } });
       else await interaction.reply({ content, allowedMentions: { parse: [] } });
