@@ -1,6 +1,7 @@
 "use strict";
 
 const { RadioSession } = require("./session");
+const { log } = require("./logger");
 
 class RadioManager {
   constructor(client, config, store) {
@@ -9,6 +10,7 @@ class RadioManager {
     this.store = store;
     this.sessions = new Map();
     this.currentTitle = () => null;
+    this.listenerCount = () => null;
   }
 
   getVolume(guildId) {
@@ -29,6 +31,39 @@ class RadioManager {
     return this.sessions.get(guildId)?.setIdleTimeout(minutes * 60 * 1000) === true;
   }
 
+  isLocked(guildId) {
+    return this.store.getLocked(guildId);
+  }
+
+  setLocked(guildId, locked) {
+    this.store.setLocked(guildId, locked);
+  }
+
+  getStay(guildId) {
+    return this.store.getStay(guildId);
+  }
+
+  setStay(guildId, stay) {
+    this.store.setStay(guildId, stay);
+    this.sessions.get(guildId)?.setStay(stay);
+  }
+
+  getRejoin(guildId) {
+    return this.store.getRejoin(guildId);
+  }
+
+  setRejoin(guildId, rejoin) {
+    this.store.setRejoin(guildId, rejoin);
+    if (!rejoin) return;
+    const channelId = this.sessions.get(guildId)?.channelId;
+    if (channelId) this.store.setChannelId(guildId, channelId);
+  }
+
+  rememberChannel(guildId, channelId) {
+    if (!this.getRejoin(guildId)) return;
+    this.store.setChannelId(guildId, channelId);
+  }
+
   session(guildId) {
     let current = this.sessions.get(guildId);
     if (current) return current;
@@ -36,6 +71,8 @@ class RadioManager {
       streamUrl: this.config.streamUrl,
       idleTimeoutMs: this.getIdleMinutes(guildId) * 60 * 1000,
       volume: this.getVolume(guildId),
+      stay: this.getStay(guildId),
+      onChannel: (id, channelId) => this.rememberChannel(id, channelId),
       onEnded: (id) => {
         if (this.sessions.get(id) === current) this.sessions.delete(id);
       },
@@ -54,6 +91,23 @@ class RadioManager {
       if (session.isActive()) count += 1;
     }
     return count;
+  }
+
+  async resumeSaved() {
+    const targets = this.store.rejoinTargets();
+    for (const { guildId, channelId } of targets) {
+      try {
+        const guild = await this.client.guilds.fetch(guildId);
+        const channel = await guild.channels.fetch(channelId);
+        if (!channel?.isVoiceBased()) {
+          this.store.setChannelId(guildId, null);
+          continue;
+        }
+        await this.session(guildId).join(channel);
+      } catch (error) {
+        log.error(`[guild:${guildId}] could not rejoin after restart`, error);
+      }
+    }
   }
 
   async leaveAll(reason) {

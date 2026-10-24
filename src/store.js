@@ -52,6 +52,44 @@ function createStore(filePath) {
       entry(guildId).idleMinutes = minutes;
       save();
     },
+    getLocked(guildId) {
+      return data.guilds[guildId]?.locked === true;
+    },
+    setLocked(guildId, locked) {
+      entry(guildId).locked = locked;
+      save();
+    },
+    getStay(guildId) {
+      return data.guilds[guildId]?.stay === true;
+    },
+    setStay(guildId, stay) {
+      entry(guildId).stay = stay;
+      save();
+    },
+    getRejoin(guildId) {
+      return data.guilds[guildId]?.rejoin === true;
+    },
+    setRejoin(guildId, rejoin) {
+      const row = entry(guildId);
+      row.rejoin = rejoin;
+      if (!rejoin) delete row.channelId;
+      save();
+    },
+    setChannelId(guildId, channelId) {
+      const row = entry(guildId);
+      if (channelId) row.channelId = channelId;
+      else delete row.channelId;
+      save();
+    },
+    rejoinTargets() {
+      const targets = [];
+      for (const [guildId, row] of Object.entries(data.guilds)) {
+        if (row?.rejoin === true && typeof row.channelId === "string" && row.channelId) {
+          targets.push({ guildId, channelId: row.channelId });
+        }
+      }
+      return targets;
+    },
   };
 }
 

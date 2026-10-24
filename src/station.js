@@ -18,8 +18,7 @@ function cleanTitle(value) {
   return title || null;
 }
 
-function titleFromStats(body) {
-  const data = JSON.parse(body);
+function titleFromData(data) {
   const direct = cleanTitle(data?.songtitle);
   if (direct) return direct;
   if (Array.isArray(data?.streams)) {
@@ -29,6 +28,24 @@ function titleFromStats(body) {
     }
   }
   return null;
+}
+
+function listenersFromData(data) {
+  const value = Number(data?.currentlisteners ?? data?.streams?.[0]?.currentlisteners);
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function titleFromStats(body) {
+  return titleFromData(JSON.parse(body));
+}
+
+function listenersFromStats(body) {
+  return listenersFromData(JSON.parse(body));
+}
+
+function readStats(body) {
+  const data = JSON.parse(body);
+  return { title: titleFromData(data), listeners: listenersFromData(data) };
 }
 
 function fetchText(url, signal) {
@@ -65,6 +82,7 @@ class StationMonitor {
     this.url = statsUrl(url);
     this.onTitle = onTitle;
     this.title = null;
+    this.listeners = null;
     this.stopped = false;
     this.failing = false;
     this.abort = null;
@@ -98,11 +116,13 @@ class StationMonitor {
     fetchText(this.url, abort.signal)
       .then((body) => {
         if (this.stopped || abort.signal.aborted) return;
+        const stats = readStats(body);
         if (this.failing) {
           this.failing = false;
           log.info("Song titles are available again.");
         }
-        this.noteTitle(titleFromStats(body));
+        this.listeners = stats.listeners;
+        this.noteTitle(stats.title);
       })
       .catch((error) => {
         if (this.stopped || abort.signal.aborted) return;
@@ -113,4 +133,4 @@ class StationMonitor {
   }
 }
 
-module.exports = { StationMonitor, statsUrl, titleFromStats };
+module.exports = { StationMonitor, statsUrl, titleFromStats, listenersFromStats };
