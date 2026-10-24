@@ -11,7 +11,7 @@ const {
   joinVoiceChannel,
 } = require("@discordjs/voice");
 const { countHumans, reconnectDelayMs } = require("./timing");
-const { spawnFfmpeg } = require("./ffmpeg");
+const { spawnDecoder, openStation } = require("./ffmpeg");
 const { log } = require("./logger");
 
 class RadioError extends Error {
@@ -52,6 +52,8 @@ class RadioSession {
     this.reconnectAttempt = 0;
     this.reconnectTimer = null;
     this.idleTimer = null;
+    this.healthyTimer = null;
+    this.stationAbort = null;
     this.chain = Promise.resolve();
     this.onEnded = options.onEnded;
   }
@@ -101,6 +103,7 @@ class RadioSession {
     });
 
     this.player.on(AudioPlayerStatus.Idle, () => {
+      this.clearHealthy();
       if (!this.isActive() || this.suppressIdle) return;
       log.warn(`${this.tag()} stream ended`);
       this.scheduleReconnect("stream ended");
@@ -108,10 +111,16 @@ class RadioSession {
 
     this.player.on(AudioPlayerStatus.Playing, () => {
       this.suppressIdle = false;
-      if (this.reconnectAttempt !== 0) {
-        log.info(`${this.tag()} stream is healthy again`);
-      }
-      this.reconnectAttempt = 0;
+      if (this.healthyTimer) return;
+      this.healthyTimer = setTimeout(() => {
+        this.healthyTimer = null;
+        if (!this.isActive()) return;
+        if (this.player?.state?.status !== AudioPlayerStatus.Playing) return;
+        if (this.reconnectAttempt !== 0) {
+          log.info(`${this.tag()} stream stayed up. Reconnect delay reset.`);
+        }
+        this.reconnectAttempt = 0;
+      }, 8000);
     });
   }
 
@@ -151,26 +160,43 @@ class RadioSession {
   stopFfmpeg() {
     const child = this.ffmpeg;
     this.ffmpeg = null;
+    this.stationAbort?.abort();
+    this.stationAbort = null;
+    if (child?.stdin) {
+      child.stdin.destroy();
+    }
     killChild(child);
+  }
+
+  clearHealthy() {
+    if (!this.healthyTimer) return;
+    clearTimeout(this.healthyTimer);
+    this.healthyTimer = null;
   }
 
   startStream() {
     const generation = ++this.playGeneration;
     this.suppressIdle = true;
+    this.clearHealthy();
     this.stopFfmpeg();
 
     let child;
     try {
-      child = spawnFfmpeg(this.streamUrl).child;
+      child = spawnDecoder().child;
     } catch (error) {
       this.suppressIdle = false;
       throw new RadioError("ffmpeg could not start. I'll keep trying.", { retry: true, cause: error });
     }
 
     this.ffmpeg = child;
+    const abort = new AbortController();
+    this.stationAbort = abort;
     child.stderr.on("data", (chunk) => {
       const line = chunk.toString().trim();
       if (line) log.warn(`${this.tag()} ffmpeg: ${line}`);
+    });
+    child.stdin.on("error", () => {
+      // ffmpeg exiting closes stdin while the station is still writing.
     });
     child.on("error", (error) => {
       if (generation !== this.playGeneration) return;
@@ -185,6 +211,26 @@ class RadioSession {
       this.scheduleReconnect("ffmpeg closed");
     });
 
+    openStation(this.streamUrl, abort.signal)
+      .then(({ response }) => {
+        if (generation !== this.playGeneration || !this.ffmpeg) {
+          response.destroy();
+          return;
+        }
+        response.on("error", (error) => {
+          if (generation !== this.playGeneration) return;
+          log.warn(`${this.tag()} station connection dropped: ${error.message}`);
+        });
+        response.pipe(child.stdin);
+        log.info(`${this.tag()} station connected, decoding`);
+      })
+      .catch((error) => {
+        if (generation !== this.playGeneration || abort.signal.aborted) return;
+        log.error(`${this.tag()} could not open the station`, error);
+        this.suppressIdle = false;
+        killChild(child);
+      });
+
     try {
       const resource = createAudioResource(child.stdout, {
         inputType: StreamType.Raw,
@@ -195,6 +241,7 @@ class RadioSession {
       this.player.play(resource);
     } catch (error) {
       killChild(child);
+      abort.abort();
       if (this.ffmpeg === child) this.ffmpeg = null;
       this.suppressIdle = false;
       throw new RadioError("The radio stream could not start. I'll keep trying.", {
@@ -380,6 +427,7 @@ class RadioSession {
     this.shouldPlay = false;
     this.clearReconnect();
     this.clearIdle();
+    this.clearHealthy();
     this.playGeneration += 1;
     this.suppressIdle = true;
     this.stopFfmpeg();
