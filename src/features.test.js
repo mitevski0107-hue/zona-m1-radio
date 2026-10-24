@@ -8,7 +8,8 @@ const path = require("node:path");
 const { normalizeIdleInput } = require("./timing");
 const { statsUrl, titleFromStats, listenersFromStats } = require("./station");
 const { createStore } = require("./store");
-const { formatStatus } = require("./status");
+const { commandJson } = require("./commands");
+const { STRINGS, describeSettings, songMessage, t } = require("./i18n");
 
 test("idle input accepts only integers 1 through 60", () => {
   assert.deepEqual(normalizeIdleInput(null), { ok: false });
@@ -40,6 +41,11 @@ test("saved volume and idle time survive a new process", () => {
   first.setStay("guild", true);
   first.setRejoin("guild", true);
   first.setChannelId("guild", "voice-1");
+  assert.equal(first.getLanguage("guild"), "mk");
+  first.setLanguage("guild", "en");
+  first.setAnnounceChannel("guild", "text-1");
+  first.setAnnounce("guild", true);
+  first.setControlRole("guild", "role-1");
 
   const second = createStore(file);
   second.load();
@@ -47,9 +53,22 @@ test("saved volume and idle time survive a new process", () => {
   assert.equal(second.getIdleMinutes("guild", 5), 12);
   assert.equal(second.getLocked("guild"), true);
   assert.equal(second.getStay("guild"), true);
+  assert.equal(second.getLanguage("guild"), "en");
+  assert.equal(second.getAnnounceChannel("guild"), "text-1");
+  assert.equal(second.getControlRole("guild"), "role-1");
   assert.deepEqual(second.rejoinTargets(), [{ guildId: "guild", channelId: "voice-1" }]);
+  assert.deepEqual(second.announceTargets(), [{ guildId: "guild", channelId: "text-1" }]);
   second.setRejoin("guild", false);
   assert.deepEqual(second.rejoinTargets(), []);
+  assert.equal(second.getLanguage("guild"), "en");
+  assert.equal(second.getAnnounceChannel("guild"), "text-1");
+  second.setAnnounce("guild", false);
+  assert.deepEqual(second.announceTargets(), []);
+  assert.equal(second.getAnnounceChannel("guild"), "text-1");
+  second.setControlRole("guild", null);
+  assert.equal(second.getControlRole("guild"), null);
+  second.setLanguage("guild", "nope");
+  assert.equal(second.getLanguage("guild"), "mk");
   assert.equal(second.getVolume("other", 50), 50);
 
   fs.writeFileSync(file, "{not json");
@@ -59,59 +78,57 @@ test("saved volume and idle time survive a new process", () => {
   fs.rmSync(file, { force: true });
 });
 
-test("status text covers idle, playing, and disconnected", () => {
-  assert.equal(
-    formatStatus({
-      channelName: "#Studio",
-      volume: 60,
-      idleMinutes: 10,
-      idleRemainingMs: null,
-      playing: true,
-      reconnecting: false,
-      active: true,
-      title: "Artist - Song",
-    }),
-    "Streaming in #Studio. Volume is 60. Now playing: Artist - Song. Leaves after 10 minutes of an empty channel.",
+test("replies default to Macedonian and cover the same keys in English", () => {
+  assert.deepEqual(Object.keys(STRINGS.mk).sort(), Object.keys(STRINGS.en).sort());
+  const mk = describeSettings("mk", {
+    idle: 5,
+    locked: false,
+    stay: true,
+    rejoin: false,
+    announce: true,
+    channelId: "1",
+    roleId: null,
+  });
+  assert.match(mk, /Празен канал: 5 минути/);
+  assert.match(mk, /Остани: вклучено/);
+  assert.match(mk, /Јазик: македонски/);
+  assert.match(mk, /<#1>/);
+  assert.match(mk, /Улога: нема/);
+  const en = describeSettings("en", {
+    idle: 1,
+    locked: true,
+    stay: false,
+    rejoin: true,
+    announce: false,
+    channelId: null,
+    roleId: "9",
+  });
+  assert.match(en, /Empty channel: 1 minute/);
+  assert.match(en, /Lock: on/);
+  assert.match(en, /Language: English/);
+  assert.match(en, /<@&9>/);
+  assert.equal(songMessage("mk", "Артист - Песна", null), "Сега на Zona M1: Артист - Песна");
+  assert.match(songMessage("mk", "Артист - Песна", 1), /1 слушател\)/);
+  assert.match(songMessage("mk", "Артист - Песна", 4), /4 слушатели\)/);
+  assert.match(songMessage("en", "Song", 1), /1 listener\)/);
+  assert.equal(t("mk", "retired").includes("/zona"), true);
+});
+
+test("slash commands are zona, volume, leave, and settings", () => {
+  const commands = commandJson();
+  assert.deepEqual(
+    commands.map((command) => command.name).sort(),
+    ["leave", "settings", "volume", "zona"],
   );
-  assert.match(
-    formatStatus({
-      channelName: "#Studio",
-      volume: 60,
-      idleMinutes: 10,
-      idleRemainingMs: 90_000,
-      playing: true,
-      reconnecting: false,
-      active: true,
-      title: null,
-      stay: true,
-      listeners: 31,
-    }),
-    /Zona M1 has 31 listeners.*Stays in an empty channel/,
+  const settings = commands.find((command) => command.name === "settings");
+  assert.deepEqual(
+    settings.options.map((option) => option.name),
+    ["language", "idle", "stay", "rejoin", "lock", "role", "channel", "songs"],
   );
-  assert.match(
-    formatStatus({
-      channelName: "#Studio",
-      volume: 60,
-      idleMinutes: 10,
-      idleRemainingMs: 90_000,
-      playing: false,
-      reconnecting: true,
-      active: true,
-      title: null,
-    }),
-    /audio dropped.*No song title yet.*leaving in 2 minutes/,
-  );
-  assert.match(
-    formatStatus({
-      channelName: "#Studio",
-      volume: 50,
-      idleMinutes: 5,
-      idleRemainingMs: null,
-      playing: false,
-      reconnecting: false,
-      active: false,
-      title: null,
-    }),
-    /^Not in a voice channel\./,
-  );
+  for (const command of commands) {
+    assert.ok(command.description.length <= 100, command.name);
+    for (const option of command.options ?? []) {
+      assert.ok(option.description.length >= 1 && option.description.length <= 100, option.name);
+    }
+  }
 });
