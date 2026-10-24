@@ -15,10 +15,11 @@ const { spawnDecoder, openStation } = require("./ffmpeg");
 const { log } = require("./logger");
 
 class RadioError extends Error {
-  constructor(message, { retry = false, cause } = {}) {
+  constructor(message, { retry = false, cause, code = "radio" } = {}) {
     super(message);
     this.name = "RadioError";
     this.retry = retry;
+    this.code = code;
     if (cause) this.cause = cause;
   }
 }
@@ -188,7 +189,7 @@ class RadioSession {
       child = spawnDecoder().child;
     } catch (error) {
       this.suppressIdle = false;
-      throw new RadioError("ffmpeg could not start. I'll keep trying.", { retry: true, cause: error });
+      throw new RadioError("ffmpeg could not start. I'll keep trying.", { retry: true, code: "ffmpeg", cause: error });
     }
 
     this.ffmpeg = child;
@@ -249,6 +250,7 @@ class RadioSession {
       this.suppressIdle = false;
       throw new RadioError("The radio stream could not start. I'll keep trying.", {
         retry: true,
+        code: "stream",
         cause: error,
       });
     }
@@ -262,7 +264,7 @@ class RadioSession {
     if (!perms?.has(["Connect", "Speak"])) {
       throw new RadioError(
         "I can't join that channel. Check that I have Connect and Speak permissions.",
-        { retry: false },
+        { retry: false, code: "perms" },
       );
     }
 
@@ -282,7 +284,7 @@ class RadioSession {
     } catch (error) {
       throw new RadioError(
         "I joined, but Discord did not finish the voice connection. I'll keep trying.",
-        { retry: true, cause: error },
+        { retry: true, code: "voice", cause: error },
       );
     }
 
