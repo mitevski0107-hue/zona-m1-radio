@@ -1,0 +1,22 @@
+{
+  "name": "zona-m1-radio-bot",
+  "version": "1.0.0",
+  "description": "Multi-guild Discord bot that streams Zona M1 Radio",
+  "main": "index.js",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test src/timing.test.js src/ffmpeg.test.js"
+  },
+  "dependencies": {
+    "@discordjs/voice": "0.19.2",
+    "@snazzah/davey": "0.1.12",
+    "discord.js": "14.27.0",
+    "dotenv": "16.6.1",
+    "ffmpeg-static": "5.3.0",
+    "libsodium-wrappers": "0.7.15",
+    "opusscript": "0.0.8"
+  }
+}
