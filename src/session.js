@@ -39,6 +39,8 @@ class RadioSession {
     this.streamUrl = options.streamUrl;
     this.idleTimeoutMs = options.idleTimeoutMs;
     this.volume = options.volume;
+    this.stay = options.stay === true;
+    this.onChannel = options.onChannel;
     this.channelId = null;
     this.connection = null;
     this.boundConnection = null;
@@ -332,6 +334,21 @@ class RadioSession {
     return true;
   }
 
+  setStay(stay) {
+    this.stay = stay === true;
+    if (!this.isActive()) return;
+    if (this.stay) {
+      if (this.idleTimer) this.clearIdle();
+      return;
+    }
+    this.enqueue(async () => {
+      const channel = await this.fetchChannel();
+      if (channel) this.refreshIdle(channel);
+    }).catch((error) => {
+      log.error(`${this.tag()} could not restart the idle timer`, error);
+    });
+  }
+
   statusSnapshot() {
     return {
       channelId: this.channelId,
@@ -341,6 +358,7 @@ class RadioSession {
       playing: this.isLive(),
       reconnecting: this.isActive() && !this.isLive() && this.reconnectAttempt > 0,
       active: this.isActive(),
+      stay: this.stay,
     };
   }
 
@@ -385,6 +403,13 @@ class RadioSession {
 
   refreshIdle(channel) {
     if (!this.isActive() || !channel) return;
+    if (this.stay) {
+      if (this.idleTimer) {
+        this.clearIdle();
+        log.info(`${this.tag()} staying in #${channel.name} while it is empty.`);
+      }
+      return;
+    }
     const humans = countHumans(channel.members);
     if (humans === 0) {
       this.armIdle(channel.name);
@@ -397,7 +422,7 @@ class RadioSession {
   }
 
   async finishIdle() {
-    if (!this.isActive()) return;
+    if (!this.isActive() || this.stay) return;
     const channel = await this.fetchChannel();
     if (channel && countHumans(channel.members) > 0) {
       log.info(`${this.tag()} channel is occupied again. Staying.`);
@@ -412,6 +437,7 @@ class RadioSession {
     if (!channelId || channelId === this.channelId) return;
     log.info(`${this.tag()} moved to channel ${channelId}`);
     this.channelId = channelId;
+    this.onChannel?.(this.guildId, channelId);
   }
 
   async join(channel) {
@@ -436,6 +462,7 @@ class RadioSession {
       }
 
       this.refreshIdle(channel);
+      this.onChannel?.(this.guildId, this.channelId);
       if (sameChannel) return "already";
       if (moving) return "moved";
       return "joined";
@@ -445,13 +472,15 @@ class RadioSession {
   async leave(reason) {
     return this.enqueue(async () => {
       const active = this.isActive() || Boolean(this.connection) || Boolean(this.channelId);
-      await this.stop(reason);
+      const forgetChannel = reason !== "SIGINT" && reason !== "SIGTERM";
+      await this.stop(reason, { forgetChannel });
       this.onEnded?.(this.guildId);
       return active;
     });
   }
 
-  async stop(reason) {
+  async stop(reason, options = {}) {
+    const forgetChannel = options.forgetChannel !== false;
     this.leaving = true;
     this.shouldPlay = false;
     this.clearReconnect();
@@ -476,6 +505,7 @@ class RadioSession {
     this.resource = null;
     this.channelId = null;
     this.reconnectAttempt = 0;
+    if (forgetChannel) this.onChannel?.(this.guildId, null);
     log.info(`${this.tag()} left (${reason})`);
   }
 }
