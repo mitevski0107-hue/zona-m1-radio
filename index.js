@@ -88,7 +88,7 @@ client.once(Events.ClientReady, async (readyClient) => {
         readyClient.user.setActivity("Zona M1 Radio", { type: ActivityType.Listening });
         return;
       }
-      const name = title.length > 128 ? `${title.slice(0, 127)}\u2026` : title;
+      const name = title.length > 128 ? title.slice(0, 128) : title;
       log.info(`Now playing: ${title}`);
       readyClient.user.setActivity(name, { type: ActivityType.Listening });
     },

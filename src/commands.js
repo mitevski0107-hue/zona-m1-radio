@@ -31,12 +31,24 @@ const commandBuilders = [
     .setDescription("Show the song Zona M1 Radio is playing"),
   new SlashCommandBuilder()
     .setName("settings")
-    .setDescription("Set how long the bot stays in an empty voice channel")
+    .setDescription("Change idle time, the moderator lock, stay, and rejoin")
     .addIntegerOption((option) =>
       option
         .setName("idle")
         .setDescription("Minutes to wait in an empty channel, from 1 to 60")
         .setRequired(false),
+    )
+    .addBooleanOption((option) =>
+      option
+        .setName("lock")
+        .setDescription("Only people who can mute members can change volume, leave, or settings")
+        .setRequired(false),
+    )
+    .addBooleanOption((option) =>
+      option.setName("stay").setDescription("Stay in the channel even when it is empty").setRequired(false),
+    )
+    .addBooleanOption((option) =>
+      option.setName("rejoin").setDescription("Rejoin the last channel after a restart").setRequired(false),
     ),
 ];
 
@@ -51,6 +63,20 @@ async function reply(interaction, content) {
     return;
   }
   await interaction.reply(payload);
+}
+
+function onOff(value) {
+  return value ? "on" : "off";
+}
+
+function describeSettings(manager, guildId) {
+  const idle = manager.getIdleMinutes(guildId);
+  return `Idle timeout is ${idle} minute${idle === 1 ? "" : "s"}. Lock is ${onOff(manager.isLocked(guildId))}. Stay is ${onOff(manager.getStay(guildId))}. Rejoin is ${onOff(manager.getRejoin(guildId))}.`;
+}
+
+function lockedOut(interaction, manager) {
+  if (!manager.isLocked(interaction.guildId)) return false;
+  return !interaction.memberPermissions?.has(PermissionFlagsBits.MuteMembers);
 }
 
 async function voiceMember(interaction) {
@@ -133,6 +159,8 @@ async function handleStatus(interaction, manager) {
       ...snapshot,
       channelName,
       title: manager.currentTitle(),
+      stay: snapshot.stay,
+      listeners: manager.listenerCount(),
     }),
   );
 }
@@ -147,26 +175,42 @@ async function handleNowPlaying(interaction, manager) {
 }
 
 async function handleSettings(interaction, manager) {
-  const supplied = interaction.options.getInteger("idle");
-  const current = manager.getIdleMinutes(interaction.guildId);
-  const parsed = normalizeIdleInput(supplied);
-  if (!parsed.ok) {
+  const suppliedIdle = interaction.options.getInteger("idle");
+  const lock = interaction.options.getBoolean("lock");
+  const stay = interaction.options.getBoolean("stay");
+  const rejoin = interaction.options.getBoolean("rejoin");
+  const parsedIdle = suppliedIdle == null ? null : normalizeIdleInput(suppliedIdle);
+  if (parsedIdle && !parsedIdle.ok) {
     await reply(
       interaction,
-      `Idle timeout is ${current} minute${current === 1 ? "" : "s"}. Use a number from ${MIN_IDLE_MINUTES} to ${MAX_IDLE_MINUTES}.`,
+      `${describeSettings(manager, interaction.guildId)} Use an idle time from ${MIN_IDLE_MINUTES} to ${MAX_IDLE_MINUTES}.`,
     );
     return;
   }
-  const restarted = manager.setIdleMinutes(interaction.guildId, parsed.value);
-  const noun = parsed.value === 1 ? "minute" : "minutes";
+
+  if (parsedIdle == null && lock == null && stay == null && rejoin == null) {
+    await reply(interaction, `${describeSettings(manager, interaction.guildId)} Set idle, lock, stay, or rejoin.`);
+    return;
+  }
+
+  let restarted = false;
+  if (parsedIdle?.ok) restarted = manager.setIdleMinutes(interaction.guildId, parsedIdle.value);
+  if (lock != null) manager.setLocked(interaction.guildId, lock);
+  if (stay != null) manager.setStay(interaction.guildId, stay);
+  if (rejoin != null) manager.setRejoin(interaction.guildId, rejoin);
   const extra = restarted ? " The empty-channel countdown started over." : "";
-  await reply(interaction, `Idle timeout set to ${parsed.value} ${noun}.${extra}`);
+  await reply(interaction, `${describeSettings(manager, interaction.guildId)}${extra}`);
 }
 
 async function handleCommand(interaction, manager) {
   if (!interaction.isChatInputCommand()) return;
   if (!interaction.inGuild()) {
     await reply(interaction, "This command only works in a server.");
+    return;
+  }
+
+  if (["volume", "leave", "settings"].includes(interaction.commandName) && lockedOut(interaction, manager)) {
+    await reply(interaction, "Only people who can mute members can use that while the lock is on.");
     return;
   }
 
