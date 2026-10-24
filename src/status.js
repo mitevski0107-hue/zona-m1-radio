@@ -7,7 +7,18 @@ function formatRemaining(ms) {
   return `${minutes} minute${minutes === 1 ? "" : "s"}`;
 }
 
-function formatStatus({ channelName, volume, idleMinutes, idleRemainingMs, playing, reconnecting, active, title }) {
+function formatStatus({
+  channelName,
+  volume,
+  idleMinutes,
+  idleRemainingMs,
+  playing,
+  reconnecting,
+  active,
+  title,
+  stay = false,
+  listeners = null,
+}) {
   let where;
   if (!active) where = "Not in a voice channel.";
   else if (reconnecting) where = `In ${channelName}, but the audio dropped. Reconnecting.`;
@@ -15,12 +26,14 @@ function formatStatus({ channelName, volume, idleMinutes, idleRemainingMs, playi
   else where = `In ${channelName}, starting the stream.`;
 
   const song = title ? `Now playing: ${title}.` : "No song title yet.";
-  const idle =
-    active && idleRemainingMs != null
-      ? `Channel is empty, leaving in ${formatRemaining(idleRemainingMs)}.`
-      : `Leaves after ${idleMinutes} minute${idleMinutes === 1 ? "" : "s"} of an empty channel.`;
+  const audience =
+    listeners == null ? "" : ` Zona M1 has ${listeners} listener${listeners === 1 ? "" : "s"}.`;
+  let idle;
+  if (stay) idle = "Stays in an empty channel until someone uses /leave.";
+  else if (active && idleRemainingMs != null) idle = `Channel is empty, leaving in ${formatRemaining(idleRemainingMs)}.`;
+  else idle = `Leaves after ${idleMinutes} minute${idleMinutes === 1 ? "" : "s"} of an empty channel.`;
 
-  return `${where} Volume is ${volume}. ${song} ${idle}`;
+  return `${where} Volume is ${volume}. ${song}${audience} ${idle}`;
 }
 
 module.exports = { formatRemaining, formatStatus };

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node index.js",
-    "test": "node --test src/timing.test.js src/ffmpeg.test.js"
+    "test": "node --test src/timing.test.js src/features.test.js src/ffmpeg.test.js"
   },
   "dependencies": {
     "@discordjs/voice": "0.19.2",
