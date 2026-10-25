@@ -88,23 +88,6 @@ function createStore(filePath) {
       entry(guildId).language = language === "en" ? "en" : "mk";
       save();
     },
-    getAnnounce(guildId) {
-      return data.guilds[guildId]?.announce === true;
-    },
-    setAnnounce(guildId, announce) {
-      entry(guildId).announce = announce === true;
-      save();
-    },
-    getAnnounceChannel(guildId) {
-      const value = data.guilds[guildId]?.announceChannelId;
-      return typeof value === "string" && value ? value : null;
-    },
-    setAnnounceChannel(guildId, channelId) {
-      const row = entry(guildId);
-      if (channelId) row.announceChannelId = channelId;
-      else delete row.announceChannelId;
-      save();
-    },
     getControlRole(guildId) {
       const value = data.guilds[guildId]?.controlRoleId;
       return typeof value === "string" && value ? value : null;
@@ -120,15 +103,6 @@ function createStore(filePath) {
       for (const [guildId, row] of Object.entries(data.guilds)) {
         if (row?.rejoin === true && typeof row.channelId === "string" && row.channelId) {
           targets.push({ guildId, channelId: row.channelId });
-        }
-      }
-      return targets;
-    },
-    announceTargets() {
-      const targets = [];
-      for (const [guildId, row] of Object.entries(data.guilds)) {
-        if (row?.announce === true && typeof row.announceChannelId === "string" && row.announceChannelId) {
-          targets.push({ guildId, channelId: row.announceChannelId });
         }
       }
       return targets;

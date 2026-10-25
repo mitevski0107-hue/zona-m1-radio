@@ -6,7 +6,7 @@ const { ActivityType, Client, Events, GatewayIntentBits } = require("discord.js"
 const { generateDependencyReport } = require("@discordjs/voice");
 const { loadConfig } = require("./src/config");
 const { log } = require("./src/logger");
-const { resolveFfmpeg } = require("./src/ffmpeg");
+const { resolveFfmpeg, openStation } = require("./src/ffmpeg");
 const { RadioManager } = require("./src/manager");
 const { handleCommand } = require("./src/commands");
 const { registerCommands } = require("./src/register");
@@ -14,7 +14,6 @@ const { t } = require("./src/i18n");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const { createStore } = require("./src/store");
-const { StationMonitor } = require("./src/station");
 
 const config = loadConfig();
 
@@ -67,7 +66,6 @@ const client = new Client({
 const store = createStore(path.join(process.cwd(), "data", "guilds.json"));
 store.load();
 const manager = new RadioManager(client, config, store);
-let monitor = null;
 let shuttingDown = false;
 
 client.once(Events.ClientReady, async (readyClient) => {
@@ -81,25 +79,8 @@ client.once(Events.ClientReady, async (readyClient) => {
   log.info(`Stream URL: ${config.streamUrl}`);
   log.info(`Default volume: ${config.defaultVolume}`);
   log.info(`Default idle timeout: ${config.idleMinutes} minutes`);
-  monitor = new StationMonitor({
-    url: config.streamUrl,
-    onTitle: (title) => {
-      if (!title) {
-        log.info("Song title cleared.");
-        readyClient.user.setActivity("Zona M1 Radio", { type: ActivityType.Listening });
-        return;
-      }
-      const name = title.length > 128 ? title.slice(0, 128) : title;
-      log.info(`Now playing: ${title}`);
-      readyClient.user.setActivity(name, { type: ActivityType.Listening });
-      manager.announceSong(title, monitor.listeners).catch((error) => {
-        log.error("Could not announce the song", error);
-      });
-    },
-  });
-  manager.currentTitle = () => monitor.title;
-  manager.listenerCount = () => monitor.listeners;
-  monitor.start();
+  log.info("This build plays the live station only. It does not read song titles.");
+  await checkStation(config.streamUrl);
   manager.resumeSaved().catch((error) => {
     log.error("Could not rejoin saved channels", error);
   });
@@ -157,7 +138,6 @@ async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info(`Received ${signal}. Disconnecting ${manager.activeCount()} server(s).`);
-  monitor?.stop();
   await manager.leaveAll(signal);
   client.destroy();
   process.exit(0);
@@ -185,6 +165,21 @@ process.on("uncaughtException", (error) => {
   log.error("Uncaught exception. Exiting so the host can restart cleanly.", error);
   process.exit(1);
 });
+
+async function checkStation(url) {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 8000);
+  try {
+    const { request, response } = await openStation(url, abort.signal);
+    response.resume();
+    request.destroy();
+    log.info("Station connection check passed.");
+  } catch (error) {
+    log.error("Could not open the station during startup. /zona will keep retrying.", error);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function main() {
   checkVoiceDeps();
