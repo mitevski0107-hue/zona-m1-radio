@@ -19,7 +19,7 @@ Anyone in the server can use these, unless the lock is on. There is no play, sto
 
 | Option | What it does |
 | --- | --- |
-| `language` | `\u041c\u0430\u043a\u0435\u0434\u043e\u043d\u0441\u043a\u0438` (default) or `English`. |
+| `language` | `Македонски` (default) or `English`. |
 | `idle` | Minutes to wait in an empty channel, from 1 to 60. Default 5. |
 | `stay` | Stay in an empty channel until `/leave`. |
 | `rejoin` | Come back to the last channel after a restart. Off until a server turns it on. |
