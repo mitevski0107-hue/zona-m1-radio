@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const http = require("node:http");
 const https = require("node:https");
 const { spawn } = require("node:child_process");
+const { secureAgent } = require("./tls");
 
 function resolveFfmpeg() {
   const fromEnv = process.env.FFMPEG_PATH?.trim();
@@ -78,6 +79,7 @@ function openStation(url, signal, options = {}) {
       url,
       {
         signal,
+        agent: lib === https ? secureAgent : undefined,
         headers: {
           "User-Agent": "ZonaM1RadioBot/1.0",
           "Icy-MetaData": icy ? "1" : "0",

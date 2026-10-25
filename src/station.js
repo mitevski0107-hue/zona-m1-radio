@@ -3,6 +3,7 @@
 const http = require("node:http");
 const https = require("node:https");
 const { log } = require("./logger");
+const { secureAgent } = require("./tls");
 
 function statsUrl(streamUrl) {
   const url = new URL(streamUrl);
@@ -55,6 +56,7 @@ function fetchText(url, signal) {
       url,
       {
         signal,
+        agent: lib === https ? secureAgent : undefined,
         headers: {
           "User-Agent": "ZonaM1RadioBot/1.0",
           Accept: "application/json",
