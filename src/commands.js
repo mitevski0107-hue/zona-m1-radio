@@ -1,6 +1,6 @@
 "use strict";
 
-const { ChannelType, PermissionFlagsBits, SlashCommandBuilder } = require("discord.js");
+const { PermissionFlagsBits, SlashCommandBuilder } = require("discord.js");
 const { MAX_VOLUME, MIN_IDLE_MINUTES, MAX_IDLE_MINUTES, MIN_VOLUME, normalizeIdleInput, normalizeVolumeInput } = require("./timing");
 const { RadioError } = require("./session");
 const { describeSettings, t } = require("./i18n");
@@ -73,16 +73,6 @@ const commandBuilders = [
         .setName("role")
         .setDescription("Улога што може да го управува ботот. @everyone ја трга.")
         .setRequired(false),
-    )
-    .addChannelOption((option) =>
-      option
-        .setName("channel")
-        .setDescription("Текстуален канал каде што ќе се јавува новата песна")
-        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-        .setRequired(false),
-    )
-    .addBooleanOption((option) =>
-      option.setName("songs").setDescription("Праќај ја песната во избраниот канал").setRequired(false),
     ),
 ];
 
@@ -105,8 +95,6 @@ function settingsSnapshot(manager, guildId) {
     locked: manager.isLocked(guildId),
     stay: manager.getStay(guildId),
     rejoin: manager.getRejoin(guildId),
-    announce: manager.getAnnounce(guildId),
-    channelId: manager.getAnnounceChannel(guildId),
     roleId: manager.getControlRole(guildId),
   };
 }
@@ -191,19 +179,9 @@ async function handleSettings(interaction, manager) {
   const stay = interaction.options.getBoolean("stay");
   const rejoin = interaction.options.getBoolean("rejoin");
   const language = interaction.options.getString("language");
-  const songs = interaction.options.getBoolean("songs");
-  const channel = interaction.options.getChannel("channel");
   const role = interaction.options.getRole("role");
   const parsedIdle = suppliedIdle == null ? null : normalizeIdleInput(suppliedIdle);
-  const nothing =
-    parsedIdle == null &&
-    lock == null &&
-    stay == null &&
-    rejoin == null &&
-    language == null &&
-    songs == null &&
-    !channel &&
-    !role;
+  const nothing = parsedIdle == null && lock == null && stay == null && rejoin == null && language == null && !role;
 
   if (parsedIdle && !parsedIdle.ok) {
     const lang = manager.getLanguage(guildId);
@@ -227,29 +205,10 @@ async function handleSettings(interaction, manager) {
   if (rejoin != null) manager.setRejoin(guildId, rejoin);
   if (language === "mk" || language === "en") manager.setLanguage(guildId, language);
   if (role) manager.setControlRole(guildId, role.id === interaction.guildId ? null : role.id);
-  if (channel) manager.setAnnounceChannel(guildId, channel.id);
-
-  const enabling = songs === true || (songs == null && channel);
-  let announceNote = "";
-  if (enabling) {
-    if (!manager.getAnnounceChannel(guildId)) {
-      announceNote = ` ${t(manager.getLanguage(guildId), "announceNeedChannel")}`;
-    } else {
-      manager.setAnnounce(guildId, true);
-      const title = manager.currentTitle();
-      if (title) {
-        await interaction.deferReply();
-        const result = await manager.announceSong(title, manager.listenerCount(), guildId);
-        if (result.failed) announceNote = ` ${t(manager.getLanguage(guildId), "announceFailed")}`;
-      }
-    }
-  } else if (songs === false) {
-    manager.setAnnounce(guildId, false);
-  }
 
   const lang = manager.getLanguage(guildId);
   const extra = restarted ? ` ${t(lang, "idleRestarted")}` : "";
-  await reply(interaction, `${describeSettings(lang, settingsSnapshot(manager, guildId))}${extra}${announceNote}`);
+  await reply(interaction, `${describeSettings(lang, settingsSnapshot(manager, guildId))}${extra}`);
 }
 
 async function handleCommand(interaction, manager) {
