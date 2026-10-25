@@ -22,7 +22,7 @@ const RADIO_ERROR_KEY = {
 const commandBuilders = [
   new SlashCommandBuilder()
     .setName("zona")
-    .setDescription("Влези во гласовниот канал и пушти го Zona M1 Radio"),
+    .setDescription("Влези во гласовниот канал и пушти Zona M1 Radio"),
   new SlashCommandBuilder()
     .setName("volume")
     .setDescription("Постави ја јачината на радиото за овој сервер")
@@ -34,10 +34,10 @@ const commandBuilders = [
         .setMaxValue(MAX_VOLUME)
         .setRequired(false),
     ),
-  new SlashCommandBuilder().setName("leave").setDescription("Исклучи го радиото од гласовниот канал"),
+  new SlashCommandBuilder().setName("leave").setDescription("Исклучи го радиото и излези од каналот"),
   new SlashCommandBuilder()
     .setName("settings")
-    .setDescription("Промени ги подесувањата на радиото за овој сервер")
+    .setDescription("Подесувања на радиото за овој сервер")
     .addStringOption((option) =>
       option
         .setName("language")
@@ -65,13 +65,13 @@ const commandBuilders = [
     .addBooleanOption((option) =>
       option
         .setName("lock")
-        .setDescription("Само Mute Members или избраната улога можат да го управуваат ботот")
+        .setDescription("Само Mute Members или избраната улога можат да управуваат")
         .setRequired(false),
     )
     .addRoleOption((option) =>
       option
         .setName("role")
-        .setDescription("Улога што може да го управува ботот. @everyone ја трга.")
+        .setDescription("Улога што може да управува со ботот. @everyone ја трга.")
         .setRequired(false),
     ),
 ];
