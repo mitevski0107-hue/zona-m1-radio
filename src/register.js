@@ -11,8 +11,8 @@ async function registerCommands(token, applicationId, guildId) {
   await rest.put(Routes.applicationCommands(applicationId), { body });
   log.info(`Registered global commands: ${names}. They can take up to an hour to appear in other servers.`);
   if (!guildId) return;
-  await rest.put(Routes.applicationGuildCommands(applicationId, guildId), { body });
-  log.info(`Registered guild commands: ${names}. They should show up in guild ${guildId} immediately.`);
+  await rest.put(Routes.applicationGuildCommands(applicationId, guildId), { body: [] });
+  log.info(`Removed the extra copies in guild ${guildId}. Each command should appear once.`);
 }
 
 module.exports = { registerCommands };
