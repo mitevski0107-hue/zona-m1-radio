@@ -47,9 +47,9 @@ Upload the **contents** of this folder so `index.js` and `package.json` are at t
    - `STREAM_URL` — optional, defaults to `https://zonam1.ddns.net:8400/;`
    - `DEFAULT_VOLUME` — optional, defaults to `50`
 4. In Git Management, pull `main`, then start the server. A restart by itself does not download new commits. The console should show a login line, ffmpeg version, `This build plays the live station only`, and `Registered global commands: /zona, /volume, /leave, /settings`.
-   - `COMMAND_GUILD_ID` — optional. Defaults to the Zona M1 server so new commands show up there immediately. Set it to `off` to skip that.
+   - `COMMAND_GUILD_ID` — optional. Defaults to the Zona M1 server. On startup the bot deletes the extra command copies in that server, so each command shows once. Set it to `off` to skip that.
 
-Global commands can take up to an hour to show up in every server. The server in `COMMAND_GUILD_ID` gets the same commands immediately. That server may list each command twice once the global copies arrive. Both copies do the same thing.
+Global commands can take up to an hour to show up in every server. After this update, restart once and the doubled commands in the Zona M1 server should disappear.
 
 Invite the bot with the `bot` and `applications.commands` scopes, and grant **View Channel**, **Connect**, and **Speak**. Replace `CLIENT_ID` with the application id:
 

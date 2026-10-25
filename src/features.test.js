@@ -84,6 +84,7 @@ test("replies default to Macedonian and cover the same keys in English", () => {
   assert.match(en, /Lock: on/);
   assert.match(en, /Language: English/);
   assert.match(en, /<@&9>/);
+  assert.equal(t("mk", "joined"), "Се приклучив и пуштив Zona M1 Radio.");
   assert.equal(t("mk", "retired").includes("/zona"), true);
 });
 
